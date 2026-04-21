@@ -1,0 +1,353 @@
+---
+title: "Assignment 3"
+author: "Maddy, Azi, Nick"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## Assignment 3
+
+Question 1
+
+```{r}
+Bank=read.csv("bank marketing.csv", stringsAsFactors=T)
+summary(Bank)
+attach(Bank)
+```
+
+Question 2:
+
+```{r}
+Bank.fit1=glm(y~.-duration, data= Bank, family = binomial)
+summary(Bank.fit1)
+```
+
+Psuedo R Squared:
+
+```{r}
+1-(22711/28999)
+```
+
+Question 3
+
+```{r}
+library(boot)
+costfunction=function(r, pi){
+  err1=ifelse(r==1&pi<0.5,1, 0)
+  err0=ifelse(r==0&pi>0.5,1, 0)
+  return(mean(err1+err0))
+}
+set.seed(12)
+cv.err10=cv.glm(Bank, Bank.fit1, cost=costfunction, K=10)
+cv.err10$delta
+```
+
+Question 4
+
+```{r}
+set.seed(12)
+Bank2=Bank[sample(nrow(Bank)),]
+k=10
+bank.prob=rep(0, nrow(Bank))
+bank.pred=rep("no", nrow(Bank))
+folds=rep(1:k, length=nrow(Bank))
+```
+
+```{r}
+for (i in 1:k){
+  obs=which(folds==i)
+  Bank.fit2=glm(y~.-duration, data=Bank2[-obs,], family=binomial)
+  bank.prob[obs]=predict(Bank.fit2, newdata=Bank2[obs,], type="response")
+  bank.pred[obs]=ifelse(bank.prob[obs]>0.5,"yes", "no")
+  }
+```
+
+```{r}
+table(bank.pred,Bank2$y)
+```
+
+Overall error rate: (FP+FN)/All = (554+3576)/41,188 =0.10027
+
+Type 1 error rate: FP/(TN+FP) (554)/(35994+554) = 0.01516
+
+Type 2 error rate: FN/(TP+FN) 3576/(1064+3576) = 0.77069
+
+Comparing to the overall error rate of cv.glm(): 0.1001263 and 0.1004006
+
+```         
+The overall error rates are nearly identical for both methods.They are both interpreting the same model so it makes sense that they are so similar.
+```
+
+```{r}
+sum(Bank2$y!=bank.pred)/nrow(Bank)
+```
+
+Question 5:
+
+```{r}
+for (i in 1:k){
+  obs=which(folds==i)
+  Bank.fit2=glm(y~.-duration, data=Bank2[-obs,], family=binomial)
+  bank.prob[obs]=predict(Bank.fit2, newdata=Bank2[obs,], type="response")
+  bank.pred[obs]=ifelse(bank.prob[obs]>0.1,"yes", "no")
+}
+table(bank.pred,Bank2$y)
+```
+
+Overall error rate: (6575+1582)/41188 = 0.198043
+
+Type 1 error rate: 6575/(29973+3058) = 0.1990554
+
+Type 2 error rate: 1582/(3058+1582) = 0.340948
+
+```{r}
+for (i in 1:k){
+  obs=which(folds==i)
+  Bank.fit2=glm(y~.-duration, data=Bank2[-obs,], family=binomial)
+  bank.prob[obs]=predict(Bank.fit2, newdata=Bank2[obs,], type="response")
+  bank.pred[obs]=ifelse(bank.prob[obs]>0.05,"yes", "no")
+}
+table(bank.pred,Bank2$y)
+```
+
+Overall error rate: (20376+662)/41188 = 0.5107798
+
+Type 1 error rate: 20376/(16172+20376) = 0.557513
+
+Type 2 error rate: 662/(3978+662)= 0.142672
+
+**Comparison:**
+
+The one with a threshold of 0.5 had the best overall error rate, with an overall error rate of 10%. It also had the best type 1 (false positive) error rate, it being 1.5%. The model with the threshold of 0.05 has the best type 2 (false negative) error rate of 14%, compared to 77% and 34% for 0.5 and 0.1 respectively. So as the threshold gets smaller, Type 1 error rates gets worse, but Type 2 gets better.
+
+Question 6:
+
+```{r}
+library(MASS)
+set.seed(12)
+lda.fit=lda(y~.-duration, data = Bank, CV=T)
+lda.obs=which(is.na(lda.fit$posterior[,1])==T)
+table(lda.fit$class[-lda.obs],Bank$y[-lda.obs])
+```
+
+Overall error rate: (1623+2912)/41167 = 0.1102
+
+Type 1: 0.0443
+
+Type 2: 0.628
+
+Question 7:
+
+```{r}
+set.seed(12)
+qda.fit=qda(y~.-duration-loan-default, data = Bank, CV=T)
+qda.obs=which(is.na(qda.fit$posterior[,1])==T)
+table(qda.fit$class[-qda.obs],Bank$y[-qda.obs])
+```
+
+Overall: (3606+2102)/41184 = 0.138597
+
+Type 1: 3606/(32942+3606) = 0.0986647
+
+Type 2: 2102/(2534+2102) = 0.453408
+
+Question 8:
+
+```{r}
+library(naivebayes)
+library(caret)
+attach(Bank)
+set.seed(12)
+name_of_probability_matrix=matrix(rep(0, nrow(Bank)*2), nrow(Bank))
+name_of_class_vector=rep("no", nrow(Bank))
+
+k=10
+folds=createFolds(Bank$y, k = k, list = TRUE)
+
+prob_matrix=matrix(0, nrow = nrow(Bank), ncol = 2)
+class_vector=rep("no", nrow(Bank))
+for (i in 1:k) {
+  train_index=unlist(folds[-i])
+  test_index=folds[[i]]
+  
+  nb.model1=naive_bayes(y ~ . - duration, data = Bank[train_index, ], usekernel = FALSE, laplace = 1)
+  predictions = predict(nb.model1, Bank[test_index, ], type = "prob")
+  prob_matrix[test_index, ]=predictions
+  class_vector[test_index]=ifelse(predictions[, "yes"] > 0.5, "yes", "no")
+}
+conf_matrix <- table(Predicted = factor(class_vector, levels = c("yes", "no")), Actual = factor(Bank$y, levels = c("yes", "no")))
+
+print(conf_matrix)
+overall_error=1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+type1_error=conf_matrix["yes", "no"] / sum(conf_matrix[, "no"])
+type2_error=conf_matrix["no", "yes"] / sum(conf_matrix[, "yes"])
+list(overall_error = overall_error, type1_error = type1_error, type2_error = type2_error) 
+
+```
+
+Question 9
+
+```{r}
+library(caret)
+set.seed(12)
+k=10
+folds=createFolds(Bank$y, k = k, list = TRUE)
+prob_matrix=matrix(0, nrow = nrow(Bank), ncol = 2)
+class_vector=rep("no", nrow(Bank))
+
+for (i in 1:k) {
+  train_index=unlist(folds[-i])
+  test_index=folds[[i]]
+  
+  nb_model=naive_bayes(y ~ . - duration, data = Bank[train_index, ], usekernel = TRUE, laplace = 1)
+  predictions=predict(nb_model, Bank[test_index, ], type = "prob")
+  prob_matrix[test_index, ] = predictions
+  class_vector[test_index] = ifelse(predictions[, "yes"] > 0.5, "yes", "no")
+}
+
+conf_matrix=table(Predicted = class_vector, Actual = Bank$y)
+print(conf_matrix)
+
+overall_error=1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+type1_error=conf_matrix["yes", "no"] / sum(conf_matrix[, "no"])
+type2_error=conf_matrix["no", "yes"] / sum(conf_matrix[, "yes"])
+
+list(overall_error = overall_error, type1_error = type1_error, type2_error = type2_error) 
+
+```
+
+Question 10
+
+```{r}
+
+set.seed(12)
+k <- 10
+folds <- createFolds(Bank$y, k = k, list = TRUE)
+
+prob_matrix <- matrix(0, nrow = nrow(Bank), ncol = 2)
+class_vector <- rep("no", nrow(Bank))
+
+for (i in 1:k) {
+  train_index <- unlist(folds[-i])
+  test_index <- folds[[i]]
+  
+  nb_model <- naive_bayes(y ~ . - duration, data = Bank[train_index, ], usekernel = TRUE, laplace = 1)
+  predictions <- predict(nb_model, Bank[test_index, ], type = "prob")
+  prob_matrix[test_index, ] <- predictions
+  class_vector[test_index] <- ifelse(predictions[, "yes"] > 0.05, "yes", "no")
+}
+
+conf_matrix <- table(Predicted = class_vector, Actual = Bank$y)
+print(conf_matrix)
+
+overall_error <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+type1_error <- conf_matrix["yes", "no"] / sum(conf_matrix[, "no"])
+type2_error <- conf_matrix["no", "yes"] / sum(conf_matrix[, "yes"])
+
+list(overall_error = overall_error, type1_error = type1_error, type2_error = type2_error) 
+
+```
+
+```{r}
+
+set.seed(12)
+k <- 10
+folds <- createFolds(Bank$y, k = k, list = TRUE)
+
+prob_matrix <- matrix(0, nrow = nrow(Bank), ncol = 2)
+class_vector <- rep("no", nrow(Bank))
+
+for (i in 1:k) {
+  train_index <- unlist(folds[-i])
+  test_index <- folds[[i]]
+  
+  nb_model <- naive_bayes(y ~ . - duration, data = Bank[train_index, ], usekernel = TRUE, laplace = 1)
+  predictions <- predict(nb_model, Bank[test_index, ], type = "prob")
+  prob_matrix[test_index, ] <- predictions
+  class_vector[test_index] <- ifelse(predictions[, "yes"] > 0.01, "yes", "no")
+}
+
+conf_matrix <- table(Predicted = class_vector, Actual = Bank$y)
+print(conf_matrix)
+
+overall_error <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+type1_error <- conf_matrix["yes", "no"] / sum(conf_matrix[, "no"])
+type2_error <- conf_matrix["no", "yes"] / sum(conf_matrix[, "yes"])
+
+list(overall_error = overall_error, type1_error = type1_error, type2_error = type2_error) 
+
+```
+
+**Comparison:**
+
+Error rate of matrix with a threshold of 0.5:
+
+```         
+$overall_error [1] 0.115689  $type1_error [1] 0.06386122  $type2_error [1] 0.5239224
+```
+
+Error rate of matrix with a threshold of 0.05:
+
+```         
+$overall_error [1] 0.1325872  $type1_error [1] 0.09743351  $type2_error [1] 0.4094828
+```
+
+Error rate of matrix with a threshold of 0.01:
+
+```         
+$overall_error [1] 0.2704671  $type1_error [1] 0.2827788  $type2_error [1] 0.1734914
+```
+
+Approach #1 using a threshold of 0.5 has the lowest overall and type 1 error rates. Approach #3 has the lowest type 2 error rate. This is the same thing we say in question 5, where a smaller threshold leads to worse error rates for overall and type 1 errors, but better for type 2. That means a lower threshold has fewer false negatives, but more false positives. And a larger threshold has more false negatives and fewer false positives.
+
+Question 11
+
+```{r}
+library(ROCR)
+library(MASS)
+library(pROC)
+rocplot=function(predictions, truth, add=FALSE, ...) {
+  pred=prediction(predictions, truth)
+  perf=performance(pred, "tpr", "fpr")
+  plot(perf, add=add, ...)
+}
+
+generate_auc=function(predictions, truth) {
+  pred-prediction(predictions, truth)
+  as.numeric(performance(pred, "auc")@y.values)
+}
+rocplot(bank.prob, Bank2$y, col="black")
+auc_logistic=auc(bank.prob, Bank2$y)
+
+set.seed(12)
+lda.fit=lda(y ~ . - duration, data = Bank)
+lda_pred=predict(lda.fit)$posterior[,2]
+rocplot(lda_pred, Bank$y, col="blue") 
+auc_lda=auc(lda_pred, Bank$y)
+
+set.seed(12)
+qda.fit=qda(y ~ . - duration - loan - default, data = Bank)
+qda_pred=predict(qda.fit)$posterior[,2]
+rocplot(qda_pred, Bank$y, col="purple") 
+auc_qda=auc(qda_pred, Bank$y)
+
+nb1_pred=prob_matrix[,2]
+rocplot(nb1_pred, Bank$y, col="red")
+auc_nb1=auc(nb1_pred, Bank$y)
+
+nb2_pred=prob_matrix[,2]
+rocplot(nb2_pred, Bank$y, col="orange")
+auc_nb2=auc(nb2_pred, Bank$y)
+
+rocplot(logistic.pred, Bank2$y)
+rocplot(lda_pred, Bank$y, add=TRUE, col="green")
+rocplot(qda_pred, Bank$y, add=TRUE, col="purple")
+rocplot(nb1_pred, Bank$y, add=TRUE, col="red")
+rocplot(nb2_pred, Bank$y, add=TRUE, col="orange")
+
+legend("bottomright", legend=c("Logistic", "LDA", "QDA", "Naive Bayes 1", "Naive Bayes 2"), col=c("black", "green", "purple", "red", "orange"), lwd=2)
+
+list(AUC_Logistic=auc_logistic, AUC_LDA=auc_lda, AUC_QDA=auc_qda, AUC_NB1=auc_nb1, AUC_NB2=auc_nb2)
+```
